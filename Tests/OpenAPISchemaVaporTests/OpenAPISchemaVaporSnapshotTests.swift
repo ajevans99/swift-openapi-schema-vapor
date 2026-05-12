@@ -63,6 +63,93 @@ struct OpenAPISchemaVaporSnapshotTests {
       let actualJSON = String(decoding: try app.openAPI.document().encodeCanonicalJSON(), as: UTF8.self)
       let expectedJSON = """
       {
+        "openapi" : "3.1.0",
+        "info" : {
+          "title" : "Pets API",
+          "version" : "1.0.0",
+          "description" : "Snapshot coverage for Vapor-generated OpenAPI JSON."
+        },
+        "paths" : {
+          "/pets" : {
+            "post" : {
+              "operationId" : "createPet",
+              "tags" : [
+                "Pets"
+              ],
+              "summary" : "Create a pet",
+              "requestBody" : {
+                "required" : true,
+                "content" : {
+                  "application/json" : {
+                    "schema" : {
+                      "$ref" : "#/components/schemas/SnapshotCreatePet"
+                    }
+                  }
+                }
+              },
+              "responses" : {
+                "201" : {
+                  "description" : "Created pet",
+                  "content" : {
+                    "application/json" : {
+                      "schema" : {
+                        "$ref" : "#/components/schemas/SnapshotPet"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "/pets/{petID}" : {
+            "get" : {
+              "operationId" : "getPet",
+              "tags" : [
+                "Pets"
+              ],
+              "summary" : "Get a pet",
+              "parameters" : [
+                {
+                  "name" : "petID",
+                  "in" : "path",
+                  "required" : true,
+                  "schema" : {
+                    "type" : "string",
+                    "format" : "uuid"
+                  },
+                  "description" : "Pet identifier"
+                },
+                {
+                  "name" : "includeToys",
+                  "in" : "query",
+                  "required" : false,
+                  "schema" : {
+                    "type" : "boolean"
+                  },
+                  "description" : "Include toy data"
+                }
+              ],
+              "responses" : {
+                "200" : {
+                  "description" : "OK",
+                  "content" : {
+                    "application/json" : {
+                      "schema" : {
+                        "$ref" : "#/components/schemas/SnapshotPet"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "servers" : [
+          {
+            "url" : "https://api.example.com",
+            "description" : "Production"
+          }
+        ],
         "components" : {
           "schemas" : {
             "SnapshotCreatePet" : {
@@ -71,10 +158,10 @@ struct OpenAPISchemaVaporSnapshotTests {
                   "type" : "string"
                 }
               },
+              "type" : "object",
               "required" : [
                 "name"
-              ],
-              "type" : "object"
+              ]
             },
             "SnapshotPet" : {
               "properties" : {
@@ -85,101 +172,14 @@ struct OpenAPISchemaVaporSnapshotTests {
                   "type" : "string"
                 }
               },
+              "type" : "object",
               "required" : [
                 "id",
                 "name"
-              ],
-              "type" : "object"
-            }
-          }
-        },
-        "info" : {
-          "description" : "Snapshot coverage for Vapor-generated OpenAPI JSON.",
-          "title" : "Pets API",
-          "version" : "1.0.0"
-        },
-        "openapi" : "3.1.0",
-        "paths" : {
-          "\\/pets" : {
-            "post" : {
-              "operationId" : "createPet",
-              "requestBody" : {
-                "content" : {
-                  "application\\/json" : {
-                    "schema" : {
-                      "$ref" : "#\\/components\\/schemas\\/SnapshotCreatePet"
-                    }
-                  }
-                },
-                "required" : true
-              },
-              "responses" : {
-                "201" : {
-                  "content" : {
-                    "application\\/json" : {
-                      "schema" : {
-                        "$ref" : "#\\/components\\/schemas\\/SnapshotPet"
-                      }
-                    }
-                  },
-                  "description" : "Created pet"
-                }
-              },
-              "summary" : "Create a pet",
-              "tags" : [
-                "Pets"
-              ]
-            }
-          },
-          "\\/pets\\/{petID}" : {
-            "get" : {
-              "operationId" : "getPet",
-              "parameters" : [
-                {
-                  "description" : "Pet identifier",
-                  "in" : "path",
-                  "name" : "petID",
-                  "required" : true,
-                  "schema" : {
-                    "format" : "uuid",
-                    "type" : "string"
-                  }
-                },
-                {
-                  "description" : "Include toy data",
-                  "in" : "query",
-                  "name" : "includeToys",
-                  "required" : false,
-                  "schema" : {
-                    "type" : "boolean"
-                  }
-                }
-              ],
-              "responses" : {
-                "200" : {
-                  "content" : {
-                    "application\\/json" : {
-                      "schema" : {
-                        "$ref" : "#\\/components\\/schemas\\/SnapshotPet"
-                      }
-                    }
-                  },
-                  "description" : "OK"
-                }
-              },
-              "summary" : "Get a pet",
-              "tags" : [
-                "Pets"
               ]
             }
           }
-        },
-        "servers" : [
-          {
-            "description" : "Production",
-            "url" : "https:\\/\\/api.example.com"
-          }
-        ]
+        }
       }
       """ + "\n"
 

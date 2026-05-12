@@ -13,9 +13,9 @@ let package = Package(
     )
   ],
   dependencies: [
-    .package(url: "https://github.com/ajevans99/swift-openapi-schema.git", from: "0.1.1"),
+    .package(url: "https://github.com/ajevans99/swift-openapi-schema.git", from: "0.1.3"),
     .package(url: "https://github.com/vapor/vapor.git", from: "4.115.0"),
-    .package(url: "https://github.com/ajevans99/swift-json-schema.git", from: "0.12.0"),
+    .package(url: "https://github.com/ajevans99/swift-json-schema.git", from: "0.13.0"),
   ],
   targets: [
     .target(
