@@ -266,6 +266,21 @@ public final class OpenAPIConfiguration {
     try OpenAPIValidator.assertValid(document)
     return document
   }
+
+  @discardableResult
+  public func serveJSON(at path: PathComponent...) -> Route {
+    serveJSON(at: path)
+  }
+
+  @discardableResult
+  public func serveJSON(at path: [PathComponent]) -> Route {
+    application.get(path) { request throws -> Vapor.Response in
+      let data = try request.application.openAPI.document().encodeCanonicalJSON()
+      var headers = HTTPHeaders()
+      headers.contentType = .json
+      return Vapor.Response(status: .ok, headers: headers, body: .init(data: data))
+    }
+  }
 }
 
 private struct InfoKey: StorageKey {

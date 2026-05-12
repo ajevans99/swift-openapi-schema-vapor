@@ -13,9 +13,9 @@ let package = Package(
     )
   ],
   dependencies: [
-    .package(url: "https://github.com/ajevans99/swift-openapi-schema.git", branch: "main"),
+    .package(url: "https://github.com/ajevans99/swift-openapi-schema.git", from: "0.1.1"),
     .package(url: "https://github.com/vapor/vapor.git", from: "4.115.0"),
-    .package(url: "https://github.com/ajevans99/swift-json-schema.git", branch: "main"),
+    .package(url: "https://github.com/ajevans99/swift-json-schema.git", from: "0.12.0"),
   ],
   targets: [
     .target(
@@ -32,6 +32,7 @@ let package = Package(
         "OpenAPISchemaVapor",
         .product(name: "OpenAPISchema", package: "swift-openapi-schema"),
         .product(name: "Vapor", package: "vapor"),
+        .product(name: "VaporTesting", package: "vapor"),
         .product(name: "JSONSchemaBuilder", package: "swift-json-schema"),
       ]
     ),
