@@ -5,8 +5,10 @@
 It lets an existing Vapor app attach OpenAPI metadata directly to routes and
 then generate an `OpenAPIDocument` from the registered route collection.
 
-The package is intentionally small and manual today, so a future Vapor 5 macro
-package can build on the same typed helpers.
+The root package remains a small, manual Vapor 4 integration. An isolated
+[Vapor 5 native-macro prototype](Vapor5/README.md) lives in `Vapor5/`, with its
+own Swift 6.4 dependency graph, runtime registry, companion metadata macros,
+and runnable external-consumer fixture.
 
 ## Installation
 
@@ -69,7 +71,7 @@ app.post("pets") { req async throws -> Pet in
   summary: "Create a pet",
   requestBody: .json(CreatePet.self),
   responses: [
-    .json(.created, Pet.self)
+    .json(.ok, Pet.self)
   ]
 )
 ```
@@ -128,16 +130,17 @@ The document uses `app.openAPI.info` and `app.openAPI.servers`. Only routes with
 ## Known limitations
 
 - Only routes explicitly marked with `documented(...)` are emitted.
-- The current API is manual; the Vapor 5 macro direction is planned but not part
-  of this package yet.
+- The root product is manual; the Vapor 5 prototype is a separate local package,
+  not a root product or remotely selectable SwiftPM subdirectory product.
 - Untyped request/response bodies require lower-level `OpenAPISchema` builders.
 - Non-standard Vapor HTTP methods currently fall back to `GET`.
 - Runtime route handler behavior is not introspected; keep the documentation
   metadata in sync with your handlers.
 
-## Vapor 5 macro direction
+## Vapor 5 prototype
 
-The planned Vapor 5 proof of concept should live in separate macro targets and
-use an aggregate macro such as `@OpenAPIController` to read marker annotations
-like `@RequestBody`, `@Response`, `@Path`, and `@Query`. The macro-generated
-code should call the same generic helpers used by this manual API.
+See [Vapor5/README.md](Vapor5/README.md) for native `@Controller` routing plus
+metadata-only `@OpenAPIController`, explicit JSON/body/security contracts,
+group-aware staged registration, and HTTP/spec parity tests. The root Vapor 4
+dependency and runtime behavior are unchanged; the two Vapor major versions
+must not be resolved in one package graph.
