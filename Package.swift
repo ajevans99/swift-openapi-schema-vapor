@@ -13,9 +13,10 @@ let package = Package(
     )
   ],
   dependencies: [
-    .package(url: "https://github.com/ajevans99/swift-openapi-schema.git", from: "0.1.3"),
+    .package(url: "https://github.com/ajevans99/swift-openapi-schema.git", from: "0.2.0"),
     .package(url: "https://github.com/vapor/vapor.git", from: "4.115.0"),
-    .package(url: "https://github.com/ajevans99/swift-json-schema.git", from: "0.13.0"),
+    .package(url: "https://github.com/ajevans99/swift-json-schema.git", from: "0.14.0"),
+    .package(url: "https://github.com/apple/swift-collections.git", from: "1.5.0"),
   ],
   targets: [
     .target(
@@ -23,7 +24,10 @@ let package = Package(
       dependencies: [
         .product(name: "OpenAPISchema", package: "swift-openapi-schema"),
         .product(name: "Vapor", package: "vapor"),
+        .product(name: "JSONSchema", package: "swift-json-schema"),
         .product(name: "JSONSchemaBuilder", package: "swift-json-schema"),
+        .product(name: "OrderedJSON", package: "swift-json-schema"),
+        .product(name: "OrderedCollections", package: "swift-collections"),
       ]
     ),
     .testTarget(
@@ -34,6 +38,7 @@ let package = Package(
         .product(name: "Vapor", package: "vapor"),
         .product(name: "VaporTesting", package: "vapor"),
         .product(name: "JSONSchemaBuilder", package: "swift-json-schema"),
+        .product(name: "OrderedJSON", package: "swift-json-schema"),
       ]
     ),
   ],
