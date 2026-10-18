@@ -67,16 +67,16 @@ public final class OpenAPIConfiguration {
   }
 
   /// A document for the documented routes beneath `prefix`, with `prefix` removed from
-  /// each path. Pass the prefix as the server URL so paths stay resolvable.
+  /// each path. `servers` defaults to the prefix, so paths stay resolvable.
   public func document(
     info: Info,
-    servers: [OpenAPISchema.Server] = [],
+    servers: [OpenAPISchema.Server]? = nil,
     including prefix: [PathComponent],
     securitySchemes: [SecurityScheme]? = nil
   ) throws -> OpenAPIDocument {
     try assemble(
       info: info,
-      servers: servers,
+      servers: servers ?? [OpenAPISchema.Server(openAPIPath(from: prefix))],
       include: { $0.path.starts(with: prefix, by: samePathComponent) },
       prefix: prefix,
       securitySchemes: securitySchemes
@@ -84,17 +84,18 @@ public final class OpenAPIConfiguration {
   }
 
   /// A document for the documented routes selected by `include`, with `prefix` removed from
-  /// each path. Throws if a selected route does not start with `prefix`.
+  /// each path. Throws if a selected route does not start with `prefix`. `servers` defaults to
+  /// the prefix.
   public func document(
     info: Info,
-    servers: [OpenAPISchema.Server] = [],
+    servers: [OpenAPISchema.Server]? = nil,
     including include: (Route) -> Bool,
     stripping prefix: [PathComponent],
     securitySchemes: [SecurityScheme]? = nil
   ) throws -> OpenAPIDocument {
     try assemble(
       info: info,
-      servers: servers,
+      servers: servers ?? [OpenAPISchema.Server(openAPIPath(from: prefix))],
       include: include,
       prefix: prefix,
       securitySchemes: securitySchemes
@@ -115,31 +116,35 @@ public final class OpenAPIConfiguration {
       .json
   }
 
+  /// The complete JSON document for the documented routes beneath `prefix`, with `prefix`
+  /// removed from each path. `servers` defaults to the prefix.
   public func documentJSON(
     info: Info,
-    servers: [OpenAPISchema.Server] = [],
+    servers: [OpenAPISchema.Server]? = nil,
     including prefix: [PathComponent],
     securitySchemes: [SecurityScheme]? = nil
   ) throws -> JSONValue {
     try assemble(
       info: info,
-      servers: servers,
+      servers: servers ?? [OpenAPISchema.Server(openAPIPath(from: prefix))],
       include: { $0.path.starts(with: prefix, by: samePathComponent) },
       prefix: prefix,
       securitySchemes: securitySchemes
     ).json
   }
 
+  /// The complete JSON document for the documented routes selected by `include`, with `prefix`
+  /// removed from each path. `servers` defaults to the prefix.
   public func documentJSON(
     info: Info,
-    servers: [OpenAPISchema.Server] = [],
+    servers: [OpenAPISchema.Server]? = nil,
     including include: (Route) -> Bool,
     stripping prefix: [PathComponent],
     securitySchemes: [SecurityScheme]? = nil
   ) throws -> JSONValue {
     try assemble(
       info: info,
-      servers: servers,
+      servers: servers ?? [OpenAPISchema.Server(openAPIPath(from: prefix))],
       include: include,
       prefix: prefix,
       securitySchemes: securitySchemes
@@ -168,6 +173,11 @@ public final class OpenAPIConfiguration {
     prefix: [PathComponent],
     securitySchemes: [SecurityScheme]?
   ) throws -> (document: OpenAPIDocument, json: JSONValue) {
+    for component in prefix {
+      guard case .constant = component else {
+        throw OpenAPISchemaVaporError.nonConstantPrefix(prefix: openAPIPath(from: prefix))
+      }
+    }
     let securitySchemes = securitySchemes ?? self.securitySchemes
     var schemeNames = Set<String>()
     for scheme in securitySchemes where !schemeNames.insert(scheme.name).inserted {
@@ -272,7 +282,17 @@ private struct PreparedRoute {
     }
     self.route = route
     self.documentation = documentation
-    self.path = openAPIPath(from: Array(route.path.dropFirst(prefix.count)))
+    for component in route.path {
+      switch component {
+      case .anything, .catchall:
+        throw OpenAPISchemaVaporError.unsupportedPathComponent(
+          operationID: operationID, path: fullPath, component: "\(component)")
+      case .constant, .parameter:
+        continue
+      }
+    }
+    let relativeComponents = Array(route.path.dropFirst(prefix.count))
+    self.path = openAPIPath(from: relativeComponents)
     self.method = try openAPIMethod(from: route.method, path: fullPath)
 
     var parameterKeys = Set<String>()
@@ -282,7 +302,7 @@ private struct PreparedRoute {
         operationID: operationID, name: parameter.name, location: parameter.location.rawValue)
     }
 
-    let routeParameterNames = route.path.compactMap { component -> String? in
+    let routeParameterNames = relativeComponents.compactMap { component -> String? in
       guard case .parameter(let name) = component else { return nil }
       return name
     }

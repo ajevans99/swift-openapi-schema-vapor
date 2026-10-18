@@ -129,10 +129,13 @@ public struct OpenAPIResponseValidator: Sendable {
         "\(label) \(status) response has no Content-Type; expected one of [\(content.keys.joined(separator: ", "))].")
       return problems
     }
-    let mediaType = contentType.split(separator: ";", maxSplits: 1)[0]
-      .trimmingCharacters(in: .whitespaces).lowercased()
+    let mediaType = essence(contentType)
     let typeWildcard = (mediaType.split(separator: "/").first.map(String.init) ?? mediaType) + "/*"
-    guard let mediaObject = content[mediaType] ?? content[typeWildcard] ?? content["*/*"] else {
+    var declared: [String: JSONValue] = [:]
+    for key in content.keys.sorted() where declared[essence(key)] == nil {
+      declared[essence(key)] = content[key]
+    }
+    guard let mediaObject = declared[mediaType] ?? declared[typeWildcard] ?? declared["*/*"] else {
       problems.append(
         "\(label) \(status) response Content-Type '\(mediaType)' is not one of [\(content.keys.joined(separator: ", "))]."
       )
@@ -234,4 +237,10 @@ private func flatten(_ error: JSONSchema.ValidationError) -> String {
     return message
   }
   return ([message] + errors.map(flatten)).joined(separator: " -> ")
+}
+
+/// The media type without parameters, lowercased: `Text/Plain; charset=utf-8` is `text/plain`.
+private func essence(_ mediaType: String) -> String {
+  mediaType.split(separator: ";", maxSplits: 1, omittingEmptySubsequences: false)[0]
+    .trimmingCharacters(in: .whitespaces).lowercased()
 }

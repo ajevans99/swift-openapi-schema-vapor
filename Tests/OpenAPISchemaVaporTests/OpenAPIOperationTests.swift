@@ -303,6 +303,53 @@ struct OpenAPIOperationTests {
   }
 
   @Test
+  func prefixedDocumentsDefaultTheirServerToThePrefix() async throws {
+    try await withGenericApp { app in
+      app.grouped("api", "v1").get("pets") { _ in Vapor.HTTPStatus.noContent }
+        .documented(operationID: "listPets", responses: [.empty(.noContent)])
+
+      let json = try app.openAPI.documentJSON(
+        info: Info(title: "Pets v1", version: "1.0.0"),
+        including: ["api", "v1"]
+      )
+      #expect(json.object?["paths"]?.object.map { Array($0.keys) } == ["/pets"])
+      #expect(json.object?["servers"] == [["url": "/api/v1"]])
+    }
+  }
+
+  @Test
+  func parameterizedPrefixThrows() async throws {
+    try await withGenericApp { app in
+      // A server URL cannot carry the path parameter, so the stripped path would have no
+      // `{ownerID}` template for the parameter Vapor still requires.
+      app.grouped("owners", ":ownerID").get("pets") { _ in Vapor.HTTPStatus.noContent }
+        .documented(operationID: "listOwnerPets", responses: [.empty(.noContent)])
+
+      #expect(throws: OpenAPISchemaVaporError.nonConstantPrefix(prefix: "/owners/{ownerID}")) {
+        try app.openAPI.documentJSON(
+          info: Info(title: "Owners", version: "1.0.0"),
+          including: ["owners", ":ownerID"]
+        )
+      }
+    }
+  }
+
+  @Test
+  func wildcardRoutesThrowInsteadOfBecomingLiteralPaths() async throws {
+    try await withGenericApp { app in
+      app.get("files", "**") { _ in Vapor.HTTPStatus.noContent }
+        .documented(operationID: "getFile", responses: [.empty(.noContent)])
+
+      #expect(
+        throws: OpenAPISchemaVaporError.unsupportedPathComponent(
+          operationID: "getFile", path: "/files/**", component: "**")
+      ) {
+        try app.openAPI.documentJSON()
+      }
+    }
+  }
+
+  @Test
   func completeDocumentValidatesAgainstTheMetaSchema() async throws {
     try await withGenericApp { app in
       app.openAPI.securitySchemes = [BearerAuth("petToken")]
@@ -393,6 +440,36 @@ struct OpenAPIResponseParityTests {
         missingHeader.validate(method: .POST, path: "/stores", status: 201)
           == ["POST /stores 201 response is missing required header 'Location'."])
     }
+  }
+
+  @Test
+  func mediaTypesMatchCaseInsensitivelyWithoutParameters() {
+    let validator = OpenAPIResponseValidator(document: [
+      "openapi": "3.1.0",
+      "paths": [
+        "/pets/{petID}/notes": [
+          "get": [
+            "operationId": "getPetNotes",
+            "responses": [
+              "200": [
+                "description": "OK",
+                "content": ["Text/Plain; charset=utf-8": ["schema": ["type": "string"]]],
+              ]
+            ],
+          ]
+        ]
+      ],
+    ])
+    var headers = HTTPHeaders()
+    headers.replaceOrAdd(name: .contentType, value: "text/plain")
+    #expect(
+      validator.validate(operationID: "getPetNotes", status: 200, headers: headers, body: Data("Friendly".utf8))
+        .isEmpty)
+
+    headers.replaceOrAdd(name: .contentType, value: "application/json")
+    #expect(
+      validator.validate(operationID: "getPetNotes", status: 200, headers: headers, body: Data("{}".utf8))
+        == ["getPetNotes 200 response Content-Type 'application/json' is not one of [Text/Plain; charset=utf-8]."])
   }
 }
 

@@ -8,6 +8,8 @@ public enum OpenAPISchemaVaporError: Error, Equatable, CustomStringConvertible {
   case emptySecurityRequirement(operationID: String)
   case invalidExtensionKey(operationID: String, key: String)
   case routeOutsidePrefix(operationID: String, path: String, prefix: String)
+  case nonConstantPrefix(prefix: String)
+  case unsupportedPathComponent(operationID: String, path: String, component: String)
 
   public var description: String {
     switch self {
@@ -32,6 +34,11 @@ public enum OpenAPISchemaVaporError: Error, Equatable, CustomStringConvertible {
         "Operation '\(operationID)' extension '\(key)' must start with 'x-' and must not use the reserved 'x-oai-' or 'x-oas-' prefixes."
     case .routeOutsidePrefix(let operationID, let path, let prefix):
       return "Operation '\(operationID)' route '\(path)' does not start with document prefix '\(prefix)'."
+    case .nonConstantPrefix(let prefix):
+      return "Document prefix '\(prefix)' must contain only constant path components."
+    case .unsupportedPathComponent(let operationID, let path, let component):
+      return
+        "Operation '\(operationID)' route '\(path)' uses '\(component)', which has no OpenAPI path template equivalent."
     }
   }
 }
