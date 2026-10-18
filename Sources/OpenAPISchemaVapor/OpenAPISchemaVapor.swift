@@ -1,48 +1,186 @@
 import JSONSchemaBuilder
 import OpenAPISchema
+import OrderedCollections
+import OrderedJSON
 import Vapor
 
 public struct OpenAPIRequestBodyDocumentation: Sendable {
-  public let body: Body
-  public let schemas: [Schema]
+  /// Media types accepted by the operation, in declaration order.
+  public let bodies: [Body]
+  public let schemas: [OpenAPISchema.Schema]
+  /// Emitted as `requestBody.required`. Defaults to `true`.
+  public let required: Bool
+  public let description: String?
 
-  public init(body: Body, schemas: [Schema] = []) {
-    self.body = body
+  /// The first declared media type.
+  public var body: Body { bodies[0] }
+
+  public init(
+    body: Body,
+    schemas: [OpenAPISchema.Schema] = [],
+    required: Bool = true,
+    description: String? = nil
+  ) {
+    self.init(bodies: [body], schemas: schemas, required: required, description: description)
+  }
+
+  public init(
+    bodies: [Body],
+    schemas: [OpenAPISchema.Schema] = [],
+    required: Bool = true,
+    description: String? = nil
+  ) {
+    precondition(!bodies.isEmpty, "A request body needs at least one media type.")
+    self.bodies = bodies
     self.schemas = schemas
+    self.required = required
+    self.description = description
+  }
+
+  /// A body with any media type, for example `application/octet-stream` or
+  /// `application/x-www-form-urlencoded`.
+  public init(
+    mediaType: MediaType,
+    schema: OpenAPISchemaValue,
+    schemas: [OpenAPISchema.Schema] = [],
+    required: Bool = true,
+    description: String? = nil
+  ) {
+    self.init(
+      body: Body(mediaType, schema: schema),
+      schemas: schemas,
+      required: required,
+      description: description
+    )
   }
 
   @available(macOS 14.0, iOS 17.0, watchOS 10.0, tvOS 17.0, *)
   public static func json<T: Content & Schemable>(
     _ type: T.Type,
-    name: String? = nil
+    name: String? = nil,
+    required: Bool = true,
+    description: String? = nil
   ) -> Self {
-    Self(body: JSONBody(type, name: name), schemas: [Schema(type, name: name)])
+    Self(
+      body: JSONBody(type, name: name),
+      schemas: [OpenAPISchema.Schema(type, name: name)],
+      required: required,
+      description: description
+    )
+  }
+
+  /// A JSON body described by a schema value, for types that are not `Schemable`.
+  /// Register named components referenced by `schema` in `schemas`.
+  public static func json(
+    schema: OpenAPISchemaValue,
+    schemas: [OpenAPISchema.Schema] = [],
+    required: Bool = true,
+    description: String? = nil
+  ) -> Self {
+    Self(
+      mediaType: .json,
+      schema: schema,
+      schemas: schemas,
+      required: required,
+      description: description
+    )
+  }
+}
+
+/// An OpenAPI Header Object attached to a documented response.
+public struct OpenAPIHeaderDocumentation: Sendable {
+  public let schema: OpenAPISchemaValue
+  public let description: String?
+  public let required: Bool
+
+  public init(
+    schema: OpenAPISchemaValue = .string(),
+    description: String? = nil,
+    required: Bool = false
+  ) {
+    self.schema = schema
+    self.description = description
+    self.required = required
+  }
+
+  func jsonValue() -> JSONValue {
+    var object: OrderedDictionary<String, JSONValue> = [:]
+    if let description {
+      object["description"] = .string(description)
+    }
+    if required {
+      object["required"] = .boolean(true)
+    }
+    object["schema"] = schema.jsonValue()
+    return .object(object)
   }
 }
 
 public struct OpenAPIResponseDocumentation: Sendable {
   public let status: Vapor.HTTPStatus
   public let description: String?
-  public let body: Body?
-  public let schemas: [Schema]
+  /// Response media types, in declaration order.
+  public let bodies: [Body]
+  public let schemas: [OpenAPISchema.Schema]
+  public let headers: [String: OpenAPIHeaderDocumentation]
+
+  /// The first declared media type, if any.
+  public var body: Body? { bodies.first }
 
   public init(
     status: Vapor.HTTPStatus,
     description: String? = nil,
     body: Body? = nil,
-    schemas: [Schema] = []
+    schemas: [OpenAPISchema.Schema] = [],
+    headers: [String: OpenAPIHeaderDocumentation] = [:]
+  ) {
+    self.init(
+      status: status,
+      description: description,
+      bodies: body.map { [$0] } ?? [],
+      schemas: schemas,
+      headers: headers
+    )
+  }
+
+  public init(
+    status: Vapor.HTTPStatus,
+    description: String? = nil,
+    bodies: [Body],
+    schemas: [OpenAPISchema.Schema] = [],
+    headers: [String: OpenAPIHeaderDocumentation] = [:]
   ) {
     self.status = status
     self.description = description
-    self.body = body
+    self.bodies = bodies
     self.schemas = schemas
+    self.headers = headers
+  }
+
+  /// A response with any media type, for example `text/event-stream` or `text/csv`.
+  public init(
+    _ status: Vapor.HTTPStatus,
+    mediaType: MediaType,
+    schema: OpenAPISchemaValue,
+    description: String? = nil,
+    schemas: [OpenAPISchema.Schema] = [],
+    headers: [String: OpenAPIHeaderDocumentation] = [:]
+  ) {
+    self.init(
+      status: status,
+      description: description,
+      bodies: [Body(mediaType, schema: schema)],
+      schemas: schemas,
+      headers: headers
+    )
   }
 
   public static func empty(
     _ status: Vapor.HTTPStatus,
-    description: String? = nil
+    description: String? = nil,
+    headers: [String: OpenAPIHeaderDocumentation] = [:]
   ) -> Self {
-    Self(status: status, description: description)
+    Self(status: status, description: description, headers: headers)
   }
 
   @available(macOS 14.0, iOS 17.0, watchOS 10.0, tvOS 17.0, *)
@@ -50,14 +188,78 @@ public struct OpenAPIResponseDocumentation: Sendable {
     _ status: Vapor.HTTPStatus,
     _ type: T.Type,
     name: String? = nil,
-    description: String? = nil
+    description: String? = nil,
+    headers: [String: OpenAPIHeaderDocumentation] = [:]
   ) -> Self {
     Self(
       status: status,
       description: description,
       body: JSONBody(type, name: name),
-      schemas: [Schema(type, name: name)]
+      schemas: [OpenAPISchema.Schema(type, name: name)],
+      headers: headers
     )
+  }
+
+  /// A JSON response described by a schema value, for types that are not `Schemable`.
+  /// Register named components referenced by `schema` in `schemas`.
+  public static func json(
+    _ status: Vapor.HTTPStatus,
+    schema: OpenAPISchemaValue,
+    schemas: [OpenAPISchema.Schema] = [],
+    description: String? = nil,
+    headers: [String: OpenAPIHeaderDocumentation] = [:]
+  ) -> Self {
+    Self(
+      status,
+      mediaType: .json,
+      schema: schema,
+      description: description,
+      schemas: schemas,
+      headers: headers
+    )
+  }
+}
+
+extension OpenAPISchema.Schema {
+  /// A named component schema written as raw JSON Schema, for types that are not `Schemable`.
+  public static func component(_ name: String, raw: JSONValue) -> Self {
+    Self(name, raw: raw)
+  }
+}
+
+/// Operation security. `nil` on a route inherits the document's top-level security.
+public enum OpenAPISecurityDocumentation: Sendable, Equatable {
+  /// Alternative requirements; each maps security scheme names to required scopes.
+  /// All schemes within one requirement apply together.
+  case required([[String: [String]]])
+  /// No credentials; emitted as `security: []`.
+  case anonymous
+
+  public static func scheme(_ name: String, scopes: [String] = []) -> Self {
+    .required([[name: scopes]])
+  }
+
+  var schemeNames: Set<String> {
+    switch self {
+    case .anonymous: []
+    case .required(let alternatives): Set(alternatives.flatMap(\.keys))
+    }
+  }
+
+  func jsonValue() -> JSONValue {
+    switch self {
+    case .anonymous:
+      return .array([])
+    case .required(let alternatives):
+      return .array(
+        alternatives.map { requirement in
+          var object: OrderedDictionary<String, JSONValue> = [:]
+          for name in requirement.keys.sorted() {
+            object[name] = .array((requirement[name] ?? []).map(JSONValue.string))
+          }
+          return .object(object)
+        })
+    }
   }
 }
 
@@ -93,6 +295,7 @@ public struct OpenAPIParameterDocumentation: Sendable {
   }
 }
 
+// swift-format-ignore: AlwaysUseLowerCamelCase
 public func PathParameter(
   _ name: String,
   schema: OpenAPISchemaValue = .string(),
@@ -101,6 +304,7 @@ public func PathParameter(
   OpenAPIParameterDocumentation(name, in: .path, schema: schema, required: true, description: description)
 }
 
+// swift-format-ignore: AlwaysUseLowerCamelCase
 public func QueryParameter(
   _ name: String,
   schema: OpenAPISchemaValue = .string(),
@@ -116,6 +320,22 @@ public func QueryParameter(
   )
 }
 
+// swift-format-ignore: AlwaysUseLowerCamelCase
+public func HeaderParameter(
+  _ name: String,
+  schema: OpenAPISchemaValue = .string(),
+  required: Bool = false,
+  description: String? = nil
+) -> OpenAPIParameterDocumentation {
+  OpenAPIParameterDocumentation(
+    name,
+    in: .header,
+    schema: schema,
+    required: required,
+    description: description
+  )
+}
+
 public struct OpenAPIRouteDocumentation: Sendable {
   public let operationID: String
   public let tags: [String]
@@ -124,6 +344,10 @@ public struct OpenAPIRouteDocumentation: Sendable {
   public let parameters: [OpenAPIParameterDocumentation]
   public let requestBody: OpenAPIRequestBodyDocumentation?
   public let responses: [OpenAPIResponseDocumentation]
+  /// `nil` inherits the document's top-level security.
+  public let security: OpenAPISecurityDocumentation?
+  /// Specification extensions; every key must start with `x-`.
+  public let extensions: [String: JSONValue]
 
   public init(
     operationID: String,
@@ -132,7 +356,9 @@ public struct OpenAPIRouteDocumentation: Sendable {
     description: String? = nil,
     parameters: [OpenAPIParameterDocumentation] = [],
     requestBody: OpenAPIRequestBodyDocumentation? = nil,
-    responses: [OpenAPIResponseDocumentation]
+    responses: [OpenAPIResponseDocumentation],
+    security: OpenAPISecurityDocumentation? = nil,
+    extensions: [String: JSONValue] = [:]
   ) {
     self.operationID = operationID
     self.tags = tags
@@ -141,9 +367,11 @@ public struct OpenAPIRouteDocumentation: Sendable {
     self.parameters = parameters
     self.requestBody = requestBody
     self.responses = responses
+    self.security = security
+    self.extensions = extensions
   }
 
-  var schemas: [Schema] {
+  var schemas: [OpenAPISchema.Schema] {
     (requestBody?.schemas ?? []) + responses.flatMap(\.schemas)
   }
 }
@@ -174,7 +402,9 @@ extension Route {
     description: String? = nil,
     parameters: [OpenAPIParameterDocumentation] = [],
     requestBody: OpenAPIRequestBodyDocumentation? = nil,
-    responses: [OpenAPIResponseDocumentation]
+    responses: [OpenAPIResponseDocumentation],
+    security: OpenAPISecurityDocumentation? = nil,
+    extensions: [String: JSONValue] = [:]
   ) -> Self {
     documented(
       OpenAPIRouteDocumentation(
@@ -184,7 +414,9 @@ extension Route {
         description: description,
         parameters: parameters,
         requestBody: requestBody,
-        responses: responses
+        responses: responses,
+        security: security,
+        extensions: extensions
       )
     )
   }
@@ -194,203 +426,4 @@ extension Application {
   public var openAPI: OpenAPIConfiguration {
     OpenAPIConfiguration(application: self)
   }
-}
-
-public final class OpenAPIConfiguration {
-  private let application: Application
-
-  fileprivate init(application: Application) {
-    self.application = application
-  }
-
-  public var info: Info {
-    get {
-      application.storage[InfoKey.self] ?? Info(title: "Vapor API", version: "1.0.0")
-    }
-    set {
-      application.storage[InfoKey.self] = newValue
-    }
-  }
-
-  public var servers: [OpenAPISchema.Server] {
-    get {
-      application.storage[ServersKey.self] ?? []
-    }
-    set {
-      application.storage[ServersKey.self] = newValue
-    }
-  }
-
-  public func document() throws -> OpenAPIDocument {
-    try document(info: info, servers: servers)
-  }
-
-  public func document(
-    info: Info,
-    servers: [OpenAPISchema.Server] = []
-  ) throws -> OpenAPIDocument {
-    let documentedRoutes = application.routes.all.compactMap { route -> DocumentedRoute? in
-      guard let documentation = route.openAPIDocumentation else {
-        return nil
-      }
-      return DocumentedRoute(route: route, documentation: documentation)
-    }
-
-    let schemas = uniqueSchemas(from: documentedRoutes.flatMap { $0.documentation.schemas })
-    let groupedRoutes = Dictionary(grouping: documentedRoutes, by: { openAPIPath(from: $0.route.path) })
-      .sorted { $0.key < $1.key }
-
-    let document = OpenAPIDocument {
-      info
-
-      for server in servers {
-        server
-      }
-
-      if !schemas.isEmpty {
-        Components {
-          for schema in schemas {
-            schema
-          }
-        }
-      }
-
-      for (path, routes) in groupedRoutes {
-        Path(path) {
-          for route in routes.sorted(by: routeSort) {
-            operation(for: route)
-          }
-        }
-      }
-    }
-    try OpenAPIValidator.assertValid(document)
-    return document
-  }
-
-  @discardableResult
-  public func serveJSON(at path: PathComponent...) -> Route {
-    serveJSON(at: path)
-  }
-
-  @discardableResult
-  public func serveJSON(at path: [PathComponent]) -> Route {
-    application.get(path) { request throws -> Vapor.Response in
-      let data = try request.application.openAPI.document().encodeCanonicalJSON()
-      var headers = HTTPHeaders()
-      headers.contentType = .json
-      return Vapor.Response(status: .ok, headers: headers, body: .init(data: data))
-    }
-  }
-}
-
-private struct InfoKey: StorageKey {
-  typealias Value = Info
-}
-
-private struct ServersKey: StorageKey {
-  typealias Value = [OpenAPISchema.Server]
-}
-
-private struct DocumentedRoute {
-  let route: Route
-  let documentation: OpenAPIRouteDocumentation
-}
-
-private func uniqueSchemas(from schemas: [Schema]) -> [Schema] {
-  var seen = Set<String>()
-  var unique: [Schema] = []
-  for schema in schemas where seen.insert(schema.name).inserted {
-    unique.append(schema)
-  }
-  return unique.sorted { $0.name < $1.name }
-}
-
-private func openAPIPath(from components: [PathComponent]) -> String {
-  let path = components.map(openAPIPathSegment).joined(separator: "/")
-  return path.isEmpty ? "/" : "/" + path
-}
-
-private func openAPIPathSegment(from component: PathComponent) -> String {
-  let rawValue = "\(component)"
-  if rawValue.hasPrefix(":") {
-    return "{\(rawValue.dropFirst())}"
-  }
-  return rawValue
-}
-
-private func routeSort(_ lhs: DocumentedRoute, _ rhs: DocumentedRoute) -> Bool {
-  lhs.route.method.rawValue < rhs.route.method.rawValue
-}
-
-private func operation(for documentedRoute: DocumentedRoute) -> OpenAPISchema.Operation {
-  let documentation = documentedRoute.documentation
-  let method = openAPIMethod(from: documentedRoute.route.method)
-  let pathParameterNames = documentedRoute.route.path.compactMap { component -> String? in
-    let segment = "\(component)"
-    guard segment.hasPrefix(":") else {
-      return nil
-    }
-    return String(segment.dropFirst())
-  }
-  let documentedParameterNames = Set(documentation.parameters.map(\.name))
-
-  return OpenAPISchema.Operation(method: method, operationID: documentation.operationID) {
-    for tag in documentation.tags {
-      Tags(tag)
-    }
-
-    if let summary = documentation.summary {
-      Summary(summary)
-    }
-
-    if let description = documentation.description {
-      Description(description)
-    }
-
-    for name in pathParameterNames where !documentedParameterNames.contains(name) {
-      OpenAPISchema.PathParameter(name)
-    }
-
-    for parameter in documentation.parameters {
-      parameter.parameter()
-    }
-
-    if let requestBody = documentation.requestBody {
-      Request {
-        requestBody.body
-      }
-    }
-
-    for response in documentation.responses {
-      OpenAPISchema.Response(
-        openAPIStatus(from: response.status),
-        description: response.description
-      ) {
-        if let body = response.body {
-          body
-        }
-      }
-    }
-  }
-}
-
-private func openAPIMethod(from method: Vapor.HTTPMethod) -> OpenAPISchema.HTTPMethod {
-  switch method {
-  case .GET:
-    .get
-  case .POST:
-    .post
-  case .PUT:
-    .put
-  case .PATCH:
-    .patch
-  case .DELETE:
-    .delete
-  default:
-    .get
-  }
-}
-
-private func openAPIStatus(from status: Vapor.HTTPStatus) -> OpenAPISchema.HTTPStatus {
-  OpenAPISchema.HTTPStatus(rawValue: String(status.code))
 }
