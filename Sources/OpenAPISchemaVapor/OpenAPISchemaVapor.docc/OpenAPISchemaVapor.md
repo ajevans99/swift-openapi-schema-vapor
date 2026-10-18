@@ -6,8 +6,8 @@ Generate OpenAPI documents from documented Vapor routes.
 
 OpenAPISchemaVapor connects Vapor route registration with
 `swift-openapi-schema`. Mark routes with `documented(...)`, describe typed JSON
-request and response bodies, and generate a validated `OpenAPIDocument` from the
-application.
+request and response bodies, and generate a validated OpenAPI 3.1 document from
+the application.
 
 ```swift
 app.post("pets") { req async throws -> Pet in
@@ -22,7 +22,8 @@ app.post("pets") { req async throws -> Pet in
   ]
 )
 
-let document = try app.openAPI.document()
+let json = try app.openAPI.documentJSON()
+let data = try OpenAPICanonicalJSON.encode(json)
 ```
 
 Types used with the typed JSON helpers must conform to `Schemable`. Their

@@ -79,9 +79,14 @@ app.get("pets", ":petID") { req async throws -> Pet in
 Build the OpenAPI document after registering routes.
 
 ```swift
-let document = try app.openAPI.document()
-let data = try document.encodeCanonicalJSON()
+let json = try app.openAPI.documentJSON()
+let data = try OpenAPICanonicalJSON.encode(json)
 ```
+
+`documentJSON()` is the complete document, validated against the OpenAPI 3.1
+meta-schema. `document()` returns the core `OpenAPIDocument`, which cannot yet
+express operation security, extensions, response headers, or optional request
+bodies; it omits them and marks every request body required.
 
 Only documented routes are included. Keep route documentation synchronized with
 handler behavior because this package does not introspect handler bodies.
